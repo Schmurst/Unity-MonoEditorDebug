@@ -35,4 +35,10 @@ public class DebugTest : MonoEditorDebug
 	{
 
 	}
+
+	[EditorDebugMethod]
+	public void TestPublic1String1Int(string _string, int _int)
+	{
+		Debug.LogFormat ("TestPublic1Param: {0}|{1}", _string, _int);
+	}
 }

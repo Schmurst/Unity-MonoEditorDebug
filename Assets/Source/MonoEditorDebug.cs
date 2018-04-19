@@ -46,7 +46,7 @@ public abstract class MonoEditorDebug : MonoBehaviour
 	{
 		const BindingFlags METHOD_FLAGS = BindingFlags.DeclaredOnly | BindingFlags.Instance | 
 										  BindingFlags.NonPublic | BindingFlags.Public;
-
+		bool m_isVisible = true;
 		MonoEditorDebug m_this;
 		List<EditorDebugMethod> m_debugMethods;
 
@@ -85,7 +85,6 @@ public abstract class MonoEditorDebug : MonoBehaviour
 				var param = _params [i];
 				if (!CanUnitySerialise (param.ParameterType))
 					return false;
-				Debug.LogFormat ("Can Serialise: {0}", param.ParameterType.ToString());
 			}
 			return true;
 		}
@@ -97,20 +96,27 @@ public abstract class MonoEditorDebug : MonoBehaviour
 				Initialise ();
 
 			EditorGUILayout.BeginVertical (EditorStyles.helpBox);
-			GUILayout.Label ("Debug Commands", EditorStyles.boldLabel);
+			m_isVisible = GUILayout.Toggle (m_isVisible, "Debug Commands", EditorStyles.boldLabel);
 
-			for (int i = 0; i < m_debugMethods.Count; i++)
+			if (m_isVisible)
 			{
-				var dm = m_debugMethods [i];
-				if (GUILayout.Button (dm.method.Name))
-					dm.method.Invoke (m_this, dm.parameters);
-				for (int k = 0; k < dm.parameterInfos.Length; k++)
-					dm.parameters [k] = SerialiseParameter (
-						dm.parameters [k], dm.parameterInfos [k]);
+				for (int i = 0; i < m_debugMethods.Count; i++)
+				{
+					EditorGUILayout.BeginVertical (EditorStyles.helpBox);
+					EditorGUILayout.BeginHorizontal ();
+					var dm = m_debugMethods [i];
+					GUILayout.Label (dm.method.Name);
+					if (GUILayout.Button ("Invoke", GUILayout.MaxWidth (80)))
+						dm.method.Invoke (m_this, dm.parameters);
+					EditorGUILayout.EndHorizontal ();
+					for (int k = 0; k < dm.parameterInfos.Length; k++)
+						dm.parameters [k] = SerialiseParameter (
+							dm.parameters [k], dm.parameterInfos [k]);
+					EditorGUILayout.EndVertical ();
+				}
 			}
 
 			EditorGUILayout.EndVertical ();
-
 			base.OnInspectorGUI ();
 		}
 
