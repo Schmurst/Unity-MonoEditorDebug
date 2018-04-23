@@ -4,10 +4,15 @@ using UnityEngine;
 
 public class DebugTest : MonoEditorDebug
 {
-	protected override System.Type Type { get { return typeof(DebugTest); } }
+	enum ETest
+	{
+		none, 
+		pizza, 
+		burger
+	}
 
 	[EditorDebugMethod]
-	void TestPrivate0Param ()
+	void TestEnum (ETest _test)
 	{
 		
 	}
@@ -31,7 +36,19 @@ public class DebugTest : MonoEditorDebug
 	}
 
 	[EditorDebugMethod]
-	public void TestPublic0Param()
+	public void TestPublic1Vec(Vector2 _vec2, Vector3 _vec3)
+	{
+
+	}
+
+	[EditorDebugMethod]
+	public void TestPublicAllTheStuff(Color _col, Bounds _bounds, Rect _rect, long _long)
+	{
+
+	}
+
+	[EditorDebugMethod]
+	public void TestPublic1bool(bool _bool)
 	{
 
 	}

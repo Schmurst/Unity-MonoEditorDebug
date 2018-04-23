@@ -6,14 +6,34 @@ using UnityEngine;
 using UnityEditor;
 using UnityEngine.Serialization;
 using System.Reflection;
+using Type = System.Type;
 #endif
 
 public class EditorDebugMethod : System.Attribute{}
 public abstract class MonoEditorDebug : MonoBehaviour
 {
-	protected abstract System.Type Type { get; }	
-
 	#if UNITY_EDITOR
+	delegate object SerialiseParameter(object param, ParameterInfo info);
+	static readonly Dictionary<Type, SerialiseParameter> UnitySerialiseFieldByType = new Dictionary<Type, SerialiseParameter> {
+		{typeof(int), 			(p, i) => {return(object)EditorGUILayout.IntField (i.Name, (int)p);}},
+		{typeof(bool), 			(p, i) => {return(object)EditorGUILayout.Toggle (i.Name, (bool)p);}},
+		{typeof(float), 		(p, i) => {return(object)EditorGUILayout.FloatField (i.Name, (float)p);}},
+		{typeof(string), 		(p, i) => {return(object)EditorGUILayout.TextField (i.Name, (string)p);}},
+		{typeof(long), 			(p, i) => {return(object)EditorGUILayout.LongField (i.Name, (long)p);}},
+		{typeof(System.Enum),	(p, i) => {return(object)EditorGUILayout.EnumPopup (i.Name, (System.Enum)p);}},
+		{typeof(Vector2), 		(p, i) => {return(object)EditorGUILayout.Vector2Field (i.Name, (Vector2)p);}},
+		{typeof(Vector2Int),	(p, i) => {return(object)EditorGUILayout.Vector2IntField (i.Name, (Vector2Int)p);}},
+		{typeof(Vector3), 		(p, i) => {return(object)EditorGUILayout.Vector3Field (i.Name, (Vector3)p);}},
+		{typeof(Vector3Int),	(p, i) => {return(object)EditorGUILayout.Vector3IntField (i.Name, (Vector3Int)p);}},
+		{typeof(Vector4), 		(p, i) => {return(object)EditorGUILayout.Vector4Field (i.Name, (Vector4)p);}},
+		{typeof(Rect), 			(p, i) => {return(object)EditorGUILayout.RectField (i.Name, (Rect)p);}},
+		{typeof(RectInt), 		(p, i) => {return(object)EditorGUILayout.RectIntField (i.Name, (RectInt)p);}},
+		{typeof(Color), 		(p, i) => {return(object)EditorGUILayout.ColorField (i.Name, (Color)p);}},
+		{typeof(Color32), 		(p, i) => {return(object)EditorGUILayout.ColorField (i.Name, (Color)p);}},
+		{typeof(Bounds), 		(p, i) => {return(object)EditorGUILayout.BoundsField (i.Name, (Bounds)p);}},
+		{typeof(BoundsInt), 	(p, i) => {return(object)EditorGUILayout.BoundsIntField (i.Name, (BoundsInt)p);}},
+	};
+
 	class EditorDebugMethod
 	{
 		public MethodInfo method;
@@ -55,7 +75,7 @@ public abstract class MonoEditorDebug : MonoBehaviour
 		{
 			m_this = (MonoEditorDebug)target;
 			m_debugMethods = new List<EditorDebugMethod> ();
-			var methods = m_this.Type.GetMethods (METHOD_FLAGS);
+			var methods = m_this.GetType().GetMethods (METHOD_FLAGS);
 			for (int i = 0; i < methods.Length; i++)
 			{
 				var attributes = methods [i].GetCustomAttributes (true);//(typeof(EditorDebugMethod), true);
@@ -65,28 +85,6 @@ public abstract class MonoEditorDebug : MonoBehaviour
 				if (parameters != null && CanSerialiseAllParameters (parameters))
 					m_debugMethods.Add (new EditorDebugMethod (methods [i], parameters));
 			}
-		}
-
-		//----------------------------------------------------------------------
-		bool CanUnitySerialise(System.Type _type)
-		{
-			if(_type.IsEnum || _type.IsPrimitive)
-				return true;
-			if (_type == typeof(string))
-				return true;
-			return false;
-		}
-
-		//----------------------------------------------------------------------
-		bool CanSerialiseAllParameters(ParameterInfo[] _params)
-		{ 
-			for (int i = 0; i < _params.Length; i++)
-			{
-				var param = _params [i];
-				if (!CanUnitySerialise (param.ParameterType))
-					return false;
-			}
-			return true;
 		}
 
 		//----------------------------------------------------------------------
@@ -106,12 +104,14 @@ public abstract class MonoEditorDebug : MonoBehaviour
 					EditorGUILayout.BeginHorizontal ();
 					var dm = m_debugMethods [i];
 					GUILayout.Label (dm.method.Name);
-					if (GUILayout.Button ("Invoke", GUILayout.MaxWidth (80)))
+					if (GUILayout.Button ("Invoke", GUILayout.MaxWidth (55)))
 						dm.method.Invoke (m_this, dm.parameters);
 					EditorGUILayout.EndHorizontal ();
 					for (int k = 0; k < dm.parameterInfos.Length; k++)
-						dm.parameters [k] = SerialiseParameter (
-							dm.parameters [k], dm.parameterInfos [k]);
+					{
+						Type type = dm.parameterInfos [k].ParameterType;
+						dm.parameters [k] = UnitySerialiseFieldByType [type] (dm.parameters [k], dm.parameterInfos [k]);
+					}
 					EditorGUILayout.EndVertical ();
 				}
 			}
@@ -119,17 +119,23 @@ public abstract class MonoEditorDebug : MonoBehaviour
 			EditorGUILayout.EndVertical ();
 			base.OnInspectorGUI ();
 		}
-
+		
 		//----------------------------------------------------------------------
-		object SerialiseParameter(object _param, ParameterInfo _info)
-		{
-			var type = _info.ParameterType;
-			if(type == typeof(int))
-				return (object)EditorGUILayout.IntField (_info.Name, (int)_param);
-			if( type == typeof(string))
-				return (object)EditorGUILayout.TextField (_info.Name, (string)_param);
-
-			return (object)default(int);
+		bool CanSerialiseAllParameters(ParameterInfo[] _params)
+		{ 
+			for (int i = 0; i < _params.Length; i++)
+			{
+				var type = _params [i].ParameterType;
+				if (type.IsArray || type is IList)
+				{
+					return false;
+				}
+				else if (!UnitySerialiseFieldByType.ContainsKey (_params [i].ParameterType))
+				{
+					return false;
+				}
+			}
+			return true;
 		}
 	}
 
