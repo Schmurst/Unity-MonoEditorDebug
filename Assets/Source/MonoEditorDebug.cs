@@ -14,7 +14,8 @@ public abstract class MonoEditorDebug : MonoBehaviour
 {
 	#if UNITY_EDITOR
 	delegate object SerialiseParameter(object param, ParameterInfo info);
-	static readonly Dictionary<Type, SerialiseParameter> UnitySerialiseFieldByType = new Dictionary<Type, SerialiseParameter> {
+	static readonly Dictionary<Type, SerialiseParameter> UnitySerialiseFieldByType = 
+		new Dictionary<Type, SerialiseParameter> {
 		{typeof(int), 			(p, i) => {return(object)EditorGUILayout.IntField (i.Name, (int)p);}},
 		{typeof(bool), 			(p, i) => {return(object)EditorGUILayout.Toggle (i.Name, (bool)p);}},
 		{typeof(float), 		(p, i) => {return(object)EditorGUILayout.FloatField (i.Name, (float)p);}},
@@ -92,7 +93,13 @@ public abstract class MonoEditorDebug : MonoBehaviour
 		{
 			if (m_this == null)
 				Initialise ();
-
+			
+			if (m_debugMethods.Count == 0)
+			{
+				base.OnInspectorGUI ();
+				return;
+			}
+				
 			EditorGUILayout.BeginVertical (EditorStyles.helpBox);
 			m_isVisible = GUILayout.Toggle (m_isVisible, "Debug Commands", EditorStyles.boldLabel);
 
@@ -110,6 +117,8 @@ public abstract class MonoEditorDebug : MonoBehaviour
 					for (int k = 0; k < dm.parameterInfos.Length; k++)
 					{
 						Type type = dm.parameterInfos [k].ParameterType;
+						if (dm.parameterInfos [k].ParameterType.IsEnum)
+							type = typeof(System.Enum);
 						dm.parameters [k] = UnitySerialiseFieldByType [type] (dm.parameters [k], dm.parameterInfos [k]);
 					}
 					EditorGUILayout.EndVertical ();
@@ -126,14 +135,12 @@ public abstract class MonoEditorDebug : MonoBehaviour
 			for (int i = 0; i < _params.Length; i++)
 			{
 				var type = _params [i].ParameterType;
+				if (type.IsEnum)
+					continue;
 				if (type.IsArray || type is IList)
-				{
 					return false;
-				}
-				else if (!UnitySerialiseFieldByType.ContainsKey (_params [i].ParameterType))
-				{
+				if (!UnitySerialiseFieldByType.ContainsKey (_params [i].ParameterType))
 					return false;
-				}
 			}
 			return true;
 		}
