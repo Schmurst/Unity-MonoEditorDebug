@@ -35,7 +35,7 @@ public abstract class MonoEditorDebug : MonoBehaviour
 		{typeof(Bounds), 		(p, i) => {return(object)EditorGUILayout.BoundsField (i.Name, (Bounds)p);}},
 		{typeof(BoundsInt), 	(p, i) => {return(object)EditorGUILayout.BoundsIntField (i.Name, (BoundsInt)p);}},
 	};
-
+		
 	class EditorDebugMethodData
 	{
 		public MethodInfo method;
@@ -52,11 +52,28 @@ public abstract class MonoEditorDebug : MonoBehaviour
 				var type = parameterInfos[i].ParameterType;
 				if(type.IsValueType)
 					parameters[i] = System.Activator.CreateInstance(type);
+				else if(CanSerialiseGenericList(type))
+					parameters[i] = System.Activator.CreateInstance(typeof(List<>).MakeGenericType(new Type[]{type}));
+				else if (type.IsArray)
+					parameters[i] = System.Array.CreateInstance(type.GetElementType(), 0);
 				else					
 					parameters[i] = null;
 			}
 		}
 	}
+
+	//----------------------------------------------------------------------
+	static bool CanSerialiseGenericList(System.Type _type)
+	{
+		if (!_type.IsGenericType || _type.GetGenericTypeDefinition () != typeof(List<>))
+			return false;
+		var parameters = _type.GetGenericArguments ();
+		if (parameters.Length > 1)
+			return false;
+		var param = !parameters [0].IsEnum ? parameters [0] : typeof(System.Enum);
+		return UnitySerialiseFieldByType.ContainsKey (param);
+	}
+
 	#endif //unity editor
 
 	//----------------------------------------------------------------------
@@ -115,21 +132,44 @@ public abstract class MonoEditorDebug : MonoBehaviour
 						dm.method.Invoke (m_this, dm.parameters);
 					EditorGUILayout.EndHorizontal ();
 					for (int k = 0; k < dm.parameterInfos.Length; k++)
-					{
-						Type type = dm.parameterInfos [k].ParameterType;
-						if (dm.parameterInfos [k].ParameterType.IsEnum)
-							type = typeof(System.Enum);
-						dm.parameters [k] = UnitySerialiseFieldByType [type] (dm.parameters [k], dm.parameterInfos [k]);
-					}
+						DrawParameterFieldAndUpdateValue (ref dm.parameters [k], dm.parameterInfos [k]);
 					EditorGUILayout.EndVertical ();
 				}
 			}
 
-
 			EditorGUILayout.EndVertical ();
 			base.OnInspectorGUI ();
 		}
-		
+
+		//----------------------------------------------------------------------
+		void DrawParameterFieldAndUpdateValue(ref object _param, ParameterInfo _info)
+		{
+			Type type = _info.ParameterType;
+			if(type.IsEnum)
+				type = typeof(System.Enum);
+			
+			if (type.IsArray)
+				DrawArrayFieldAndUpdateValues (ref _param, _info);
+			else if (type.IsGenericType && type.GetGenericTypeDefinition () == typeof(List<>))
+				DrawListFieldAndUpdateValues (ref _param, _info);
+			else
+				_param = UnitySerialiseFieldByType [type] (_param, _info);
+		}
+
+		//----------------------------------------------------------------------
+		void DrawArrayFieldAndUpdateValues(ref object _param, ParameterInfo _info)
+		{
+			var array = _param as System.Array;
+			int desiredLength = EditorGUILayout.IntField ("Length", array.Length);
+		}
+
+		//----------------------------------------------------------------------
+		void DrawListFieldAndUpdateValues(ref object _param, ParameterInfo _info)
+		{
+			var list = _param as IList;
+			int desiredLength = EditorGUILayout.IntField ("Length", list.Count);
+		}
+
 		//----------------------------------------------------------------------
 		bool CanSerialiseAllParameters(ParameterInfo[] _params)
 		{ 
@@ -138,9 +178,11 @@ public abstract class MonoEditorDebug : MonoBehaviour
 				var type = _params [i].ParameterType;
 				if (type.IsEnum)
 					continue;
-				if (type.IsArray || type.IsAssignableFrom(typeof(IList)))
-					return false;
-				if (!UnitySerialiseFieldByType.ContainsKey (_params [i].ParameterType))
+				if (type.IsArray)
+					type = type.GetElementType ();
+				if (CanSerialiseGenericList(type))
+					type = type.GetGenericArguments ()[0];
+				if (!UnitySerialiseFieldByType.ContainsKey (type))
 					return false;
 			}
 			return true;
