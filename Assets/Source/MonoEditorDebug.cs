@@ -125,6 +125,7 @@ public abstract class MonoEditorDebug : MonoBehaviour
 				}
 			}
 
+
 			EditorGUILayout.EndVertical ();
 			base.OnInspectorGUI ();
 		}
@@ -137,7 +138,7 @@ public abstract class MonoEditorDebug : MonoBehaviour
 				var type = _params [i].ParameterType;
 				if (type.IsEnum)
 					continue;
-				if (type.IsArray || type is IList)
+				if (type.IsArray || type.IsAssignableFrom(typeof(IList)))
 					return false;
 				if (!UnitySerialiseFieldByType.ContainsKey (_params [i].ParameterType))
 					return false;

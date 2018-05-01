@@ -9,6 +9,18 @@ public abstract class DebugTestBase : MonoEditorDebug
 	{
 
 	}
+
+	[EditorDebugMethod]
+	protected void TestArray(string[] _stringArray)
+	{
+
+	}
+
+	[EditorDebugMethod]
+	protected void TestList(List<string> _stringList)
+	{
+
+	}
 }
 
 public class DebugTest : DebugTestBase
