@@ -2,7 +2,16 @@
 using System.Collections.Generic;
 using UnityEngine;
 
-public class DebugTest : MonoEditorDebug
+public abstract class DebugTestBase : MonoEditorDebug
+{
+	[EditorDebugMethod]
+	protected void Test_Base(string _string)
+	{
+
+	}
+}
+
+public class DebugTest : DebugTestBase
 {
 	enum ETest
 	{
@@ -10,8 +19,7 @@ public class DebugTest : MonoEditorDebug
 		pizza, 
 		burger
 	}
-
-	[EditorDebugMethod]
+		
 	void TestEnum (ETest _test)
 	{
 		

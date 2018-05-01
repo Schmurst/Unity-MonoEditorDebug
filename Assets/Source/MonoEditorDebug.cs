@@ -9,6 +9,7 @@ using System.Reflection;
 using Type = System.Type;
 #endif
 
+[System.AttributeUsage(System.AttributeTargets.Method)]
 public class EditorDebugMethod : System.Attribute{}
 public abstract class MonoEditorDebug : MonoBehaviour
 {
@@ -35,13 +36,13 @@ public abstract class MonoEditorDebug : MonoBehaviour
 		{typeof(BoundsInt), 	(p, i) => {return(object)EditorGUILayout.BoundsIntField (i.Name, (BoundsInt)p);}},
 	};
 
-	class EditorDebugMethod
+	class EditorDebugMethodData
 	{
 		public MethodInfo method;
 		public object[] parameters;
 		public ParameterInfo[] parameterInfos;
 
-		public EditorDebugMethod(MethodInfo _method, ParameterInfo[] _params)
+		public EditorDebugMethodData(MethodInfo _method, ParameterInfo[] _params)
 		{
 			method = _method;
 			parameters = new object[_params.Length];
@@ -65,26 +66,25 @@ public abstract class MonoEditorDebug : MonoBehaviour
 	[CustomEditor(typeof(MonoEditorDebug), true)]
 	public class MonoBehaviourEditor : Editor
 	{
-		const BindingFlags METHOD_FLAGS = BindingFlags.DeclaredOnly | BindingFlags.Instance | 
-										  BindingFlags.NonPublic | BindingFlags.Public;
+		const BindingFlags METHOD_FLAGS = BindingFlags.Instance | BindingFlags.NonPublic | BindingFlags.Public;
 		bool m_isVisible = true;
 		MonoEditorDebug m_this;
-		List<EditorDebugMethod> m_debugMethods;
+		List<EditorDebugMethodData> m_debugMethods;
 
 		//----------------------------------------------------------------------
 		void Initialise()
 		{
 			m_this = (MonoEditorDebug)target;
-			m_debugMethods = new List<EditorDebugMethod> ();
+			m_debugMethods = new List<EditorDebugMethodData> ();
 			var methods = m_this.GetType().GetMethods (METHOD_FLAGS);
 			for (int i = 0; i < methods.Length; i++)
 			{
-				var attributes = methods [i].GetCustomAttributes (true);//(typeof(EditorDebugMethod), true);
+				var attributes = methods [i].GetCustomAttributes (typeof(EditorDebugMethod), true);
 				if (attributes.Length == 0)
 					continue;
 				var parameters = methods [i].GetParameters ();
 				if (parameters != null && CanSerialiseAllParameters (parameters))
-					m_debugMethods.Add (new EditorDebugMethod (methods [i], parameters));
+					m_debugMethods.Add (new EditorDebugMethodData (methods [i], parameters));
 			}
 		}
 
