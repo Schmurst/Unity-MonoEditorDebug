@@ -4,20 +4,22 @@ using UnityEngine;
 
 public abstract class DebugTestBase : MonoEditorDebug
 {
-	[EditorDebugMethod]
 	protected void Test_Base(string _string)
 	{
 		Debug.LogFormat ("hello: {0}", _string);
 	}
 		
-	[EditorDebugMethod]
+	[EditorDebugMethod(true)]
 	protected void TestArray(string[] _stringArray)
 	{
-		
+        string arr = string.Empty;
+        for (int i = 0; i < _stringArray.Length; i++)
+            arr += _stringArray[i];
+        Debug.Log(arr);
 	}
 
-	[EditorDebugMethod]
-	protected void TestArray(List<int> _intList)
+	[EditorDebugMethod(true)]
+    protected void TestList(List<int> _intList)
 	{
 
 	}
@@ -28,15 +30,9 @@ public abstract class DebugTestBase : MonoEditorDebug
 
 	}
 
-	[EditorDebugMethod]
 	protected void HelloWorld(Rect _rect)
 	{
 	}
-
-    [EditorDebugMethod(true)]
-    protected void AllowInEditMode(Rect _rect)
-    {
-    }
 }
 
 public class DebugTest : DebugTestBase
