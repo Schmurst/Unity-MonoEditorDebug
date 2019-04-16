@@ -9,7 +9,7 @@ public abstract class DebugTestBase : MonoEditorDebug
 		Debug.LogFormat ("hello: {0}", _string);
 	}
 		
-	[EditorDebugMethod(true)]
+	[EditorDebugMethod]
 	protected void TestArray(string[] _stringArray)
 	{
         string arr = string.Empty;
@@ -19,6 +19,12 @@ public abstract class DebugTestBase : MonoEditorDebug
 	}
 
 	[EditorDebugMethod(true)]
+	protected void TestGameObjectList(List<GameObject> _gameObjects)
+	{
+
+	}
+
+	[EditorDebugMethod]
     protected void TestList(List<int> _intList)
 	{
 
@@ -42,5 +48,12 @@ public class DebugTest : DebugTestBase
 		none, 
 		pizza, 
 		burger
+	}
+
+	[ExposeInInspector()]
+	string TimeMessage => Time.time.ToString();
+
+	void Update() {
+
 	}
 }

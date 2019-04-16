@@ -16,7 +16,6 @@ using System;
 public class EditorDebugMethod : System.Attribute
 {
     public bool AllowUseInEditMode;   
-
     public EditorDebugMethod(bool _showInEditMode = false)
     {
         AllowUseInEditMode = _showInEditMode;
@@ -24,12 +23,20 @@ public class EditorDebugMethod : System.Attribute
 }
 
 //----------------------------------------------------------------------
+[System.AttributeUsage(System.AttributeTargets.Property)]
+public class ExposeInInspector : System.Attribute {
+	public string m_prefix;
+	public ExposeInInspector() { m_prefix = string.Empty; }
+	public ExposeInInspector(string _prefix) {m_prefix = _prefix;}
+}
+
+
+//----------------------------------------------------------------------
 public abstract class MonoEditorDebug : MonoBehaviour
 {
     #if UNITY_EDITOR
     delegate object SerialiseParameter(object param, ParameterInfo info);
-    static readonly Dictionary<Type, SerialiseParameter> UnitySerialiseFieldByType = 
-        new Dictionary<Type, SerialiseParameter> {
+    static Dictionary<Type, SerialiseParameter> UnitySerialiseFieldByType = new Dictionary<Type, SerialiseParameter> {
         {typeof(int),             (p, i) => {return(object)EditorGUILayout.IntField (i.Name, (int)p);}},
         {typeof(bool),             (p, i) => {return(object)EditorGUILayout.Toggle (i.Name, (bool)p);}},
         {typeof(float),         (p, i) => {return(object)EditorGUILayout.FloatField (i.Name, (float)p);}},
@@ -68,7 +75,25 @@ public abstract class MonoEditorDebug : MonoBehaviour
     }
 
     //----------------------------------------------------------------------
-    const bool SUPPORT_ARRAYS = false; 
+    class InspectorMessageData
+	{
+		PropertyInfo property;
+		MethodInfo getMethod;
+		string prefix;
+
+		public InspectorMessageData(PropertyInfo _property, string _prefix)
+		{
+			prefix = _prefix;
+			property = _property;
+			getMethod = property.GetMethod;
+		}
+
+		public string GetMessage(object _object)
+		{
+			return $"{prefix}{getMethod.Invoke(_object, null)}";
+		}
+	}
+
     //----------------------------------------------------------------------
     static object CreateDefaultObject(System.Type type)
     {
@@ -102,41 +127,19 @@ public abstract class MonoEditorDebug : MonoBehaviour
     static bool CanSerialiseType(System.Type _type)
     {
         var param = !_type.IsEnum ? _type : typeof(System.Enum);
+        if (!UnitySerialiseFieldByType.ContainsKey (_type))
+        {
+            if (typeof(UnityEngine.Object).IsAssignableFrom(_type))
+            {
+                var methodTemplate = typeof(MonoBehaviourEditor).GetMethod("DrawMonobehaviour", BindingFlags.Static | BindingFlags.NonPublic);
+                var newMethod = methodTemplate.MakeGenericMethod(_type);
+                var serialiseDelegate = (SerialiseParameter) Delegate.CreateDelegate(typeof(SerialiseParameter), newMethod);
+                UnitySerialiseFieldByType.Add(_type, serialiseDelegate);
+            }
+            if (!UnitySerialiseFieldByType.ContainsKey(_type))
+                return false;
+        }
         return UnitySerialiseFieldByType.ContainsKey(param);
-    }
-
-    //----------------------------------------------------------------------
-    static T Cast<T> (object _object)
-    {
-        return (T)_object;
-    }
-
-    //----------------------------------------------------------------------
-    static MethodInfo CreateCastMethod(Type _type)
-    {
-        return typeof(MonoEditorDebug).GetMethod("Cast", BindingFlags.Static | BindingFlags.NonPublic).MakeGenericMethod(_type);
-    }
-
-    //----------------------------------------------------------------------
-    static T Find<T>(T[] _array, Predicate<T> _predicate)
-    {
-        if (_array == null || _predicate == null)
-            return default(T);
-        for (int i = 0; i < _array.Length; i++)
-            if (_predicate(_array[i]))
-                return _array[i];
-        return default(T);
-    }
-
-    //----------------------------------------------------------------------
-    static bool Contains<T>(T[] _array, Predicate<T> _predicate)
-    {
-        if (_array == null || _predicate == null)
-            return false;
-        for (int i = 0; i < _array.Length; i++)
-            if (_predicate(_array[i]))
-                return true;
-        return false;
     }
 
     #endif //unity editor
@@ -149,10 +152,17 @@ public abstract class MonoEditorDebug : MonoBehaviour
     public class MonoBehaviourEditor : Editor
     {
         const BindingFlags METHOD_FLAGS = BindingFlags.Instance | BindingFlags.NonPublic | BindingFlags.Public;
-        bool m_isVisible = true;
+        bool m_areMethodsVisible = true;
+        bool m_areMessagesVisible = true;
         MonoEditorDebug m_this;
         List<EditorDebugMethodData> m_debugMethods;
+        List<InspectorMessageData> m_messages;
 
+        //----------------------------------------------------------------------
+        public override bool RequiresConstantRepaint()
+        {
+            return m_messages != null && m_messages.Count > 0;
+        }
         //----------------------------------------------------------------------
         void Initialise()
         {
@@ -171,6 +181,16 @@ public abstract class MonoEditorDebug : MonoBehaviour
                 if (parameters != null && CanSerialiseAllParameters (parameters))
                     m_debugMethods.Add (new EditorDebugMethodData (methods [i], parameters, debugAttrib.AllowUseInEditMode));
             }
+
+            m_messages = new List<InspectorMessageData>();
+			var properties = m_this.GetType().GetProperties(METHOD_FLAGS);
+			for (int i = 0; i < properties.Length; i++)
+			{
+				var attribute = properties[i].GetCustomAttribute<ExposeInInspector>(true);
+				if (attribute == null)
+					continue;
+				m_messages.Add(new InspectorMessageData(properties[i], attribute.m_prefix));
+			}
         }
 
         //----------------------------------------------------------------------
@@ -179,16 +199,22 @@ public abstract class MonoEditorDebug : MonoBehaviour
             if (m_this == null)
                 Initialise ();
             
-            if (m_debugMethods.Count == 0)
-            {
-                base.OnInspectorGUI ();
-                return;
-            }
-                
-            EditorGUILayout.BeginVertical (EditorStyles.helpBox);
-            m_isVisible = GUILayout.Toggle (m_isVisible, "Debug Commands", EditorStyles.boldLabel);
+            if (m_debugMethods.Count > 0)
+                DrawAndUpdateMethods();
 
-            if (m_isVisible)
+            if (EditorApplication.isPlaying && m_messages.Count > 0)
+                DrawInspectorMessages();
+
+            base.OnInspectorGUI ();
+        }
+
+        //----------------------------------------------------------------------
+        void DrawAndUpdateMethods()
+        {
+            EditorGUILayout.BeginVertical (EditorStyles.helpBox);
+            m_areMethodsVisible = GUILayout.Toggle (m_areMethodsVisible, "Debug Commands", EditorStyles.boldLabel);
+
+            if (m_areMethodsVisible)
             {
                 for (int i = 0; i < m_debugMethods.Count; i++)
                 {
@@ -202,21 +228,41 @@ public abstract class MonoEditorDebug : MonoBehaviour
                         OnInvokePress(dm);
                     EditorGUILayout.EndHorizontal ();
                     for (int k = 0; k < dm.parameterInfos.Length; k++)
-                       DrawParameterFieldAndUpdateValue (ref dm.parameters [k], dm.parameterInfos [k]);
+                    DrawParameterFieldAndUpdateValue (ref dm.parameters [k], dm.parameterInfos [k]);
                     EditorGUILayout.EndVertical ();
                 }
             }
-
             EditorGUILayout.EndVertical ();
-            base.OnInspectorGUI ();
         }
 
+        //----------------------------------------------------------------------
+        void DrawInspectorMessages()
+        {
+            EditorGUILayout.BeginVertical(EditorStyles.helpBox);
+            m_areMessagesVisible = GUILayout.Toggle(m_areMessagesVisible, "Debug Messages", EditorStyles.boldLabel);
+
+            if (m_areMessagesVisible)
+            {
+                for (int i = 0; i < m_messages.Count; i++)
+                {
+                    GUILayout.Label(m_messages[i].GetMessage(m_this));
+                }
+            }
+            EditorGUILayout.EndVertical();
+        }
+        
         //----------------------------------------------------------------------
         void OnInvokePress(EditorDebugMethodData _methodData)
         {
             var parametersToInvoke = GetParametersToInvoke(_methodData);
             _methodData.method.Invoke(m_this, parametersToInvoke);            
         }
+
+        //----------------------------------------------------------------------
+		static object DrawMonobehaviour<T>(object _param, ParameterInfo _info) where T: UnityEngine.Object
+		{
+			return EditorGUILayout.ObjectField(_info.Name, _param as T, typeof(T), true);
+		}
 
         //----------------------------------------------------------------------
         object[] GetParametersToInvoke(EditorDebugMethodData _methodData)
@@ -299,7 +345,40 @@ public abstract class MonoEditorDebug : MonoBehaviour
             }
             return true;
         }
-    }
 
+        //----------------------------------------------------------------------
+        static T Cast<T> (object _object)
+        {
+            return (T)_object;
+        }
+
+        //----------------------------------------------------------------------
+        static MethodInfo CreateCastMethod(Type _type)
+        {
+            return typeof(MonoEditorDebug).GetMethod("Cast", BindingFlags.Static | BindingFlags.NonPublic).MakeGenericMethod(_type);
+        }
+
+        //----------------------------------------------------------------------
+        static T Find<T>(T[] _array, Predicate<T> _predicate)
+        {
+            if (_array == null || _predicate == null)
+                return default(T);
+            for (int i = 0; i < _array.Length; i++)
+                if (_predicate(_array[i]))
+                    return _array[i];
+            return default(T);
+        }
+
+        //----------------------------------------------------------------------
+        static bool Contains<T>(T[] _array, Predicate<T> _predicate)
+        {
+            if (_array == null || _predicate == null)
+                return false;
+            for (int i = 0; i < _array.Length; i++)
+                if (_predicate(_array[i]))
+                    return true;
+            return false;
+        }
+    }
     #endif
 }
